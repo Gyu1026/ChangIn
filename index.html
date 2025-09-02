@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>이미지 전체화면 뷰어</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
+    body { font-family: sans-serif; color: #fff; }
+
+    .viewer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      user-select: none;
+      touch-action: none;
+      cursor: grab;
+    }
+    .viewer.grabbing { cursor: grabbing; }
+
+    .stage {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(1);
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+    .stage img {
+      display: block;
+      max-width: none;
+      max-height: none;
+    }
+
+    .toolbar {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+    .btn {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+    }
+    .btn:hover { background: rgba(255,255,255,0.2); }
+
+    .hint {
+      position: absolute;
+      left: 12px; bottom: 12px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="viewer" id="viewer">
+    <div class="toolbar">
+      <button class="btn" id="zoomOut">−</button>
+      <button class="btn" id="zoomIn">＋</button>
+      <button class="btn" id="fit">맞춤</button>
+      <button class="btn" id="one">100%</button>
+    </div>
+
+    <div class="stage" id="stage">
+      <!-- ✅ 고객 이미지 -->
+      <img id="img" alt="이미지" src="https://drive.google.com/uc?export=view&id=1kRDqhz_JLbQ9j6K59x9uZ20HFG0_kBzC" />
+    </div>
+
+    <div class="hint">마우스 휠 확대/축소 · 드래그 이동 · 더블클릭 맞춤</div>
+  </div>
+
+  <script>
+    (function(){
+      const viewer = document.getElementById('viewer');
+      const stage = document.getElementById('stage');
+      const img = document.getElementById('img');
+      const btnIn = document.getElementById('zoomIn');
+      const btnOut = document.getElementById('zoomOut');
+      const btnFit = document.getElementById('fit');
+      const btnOne = document.getElementById('one');
+
+      let scale = 1;
+      let minScale = 1;
+      let maxScale = 8;
+      let imgW = 0, imgH = 0;
+      let panX = 0, panY = 0;
+      let dragging = false;
+      let lastX = 0, lastY = 0;
+
+      function applyTransform() {
+        stage.style.transform =
+          `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
+      }
+
+      function fitToScreen() {
+        const vw = viewer.clientWidth;
+        const vh = viewer.clientHeight;
+        if (!imgW || !imgH) return;
+        const s = Math.min(vw / imgW, vh / imgH);
+        minScale = s;
+        scale = s;
+        panX = 0; panY = 0;
+        applyTransform();
+      }
+
+      function zoomAt(factor, cx, cy){
+        const prevScale = scale;
+        scale = Math.max(minScale, Math.min(maxScale, scale * factor));
+        const actual = scale / prevScale;
+        const rect = viewer.getBoundingClientRect();
+        const x = cx - rect.left - rect.width/2 - panX;
+        const y = cy - rect.top - rect.height/2 - panY;
+        panX -= x * (actual - 1);
+        panY -= y * (actual - 1);
+        applyTransform();
+      }
+
+      btnIn.onclick = () => zoomAt(1.2, viewer.clientWidth/2, viewer.clientHeight/2);
+      btnOut.onclick = () => zoomAt(1/1.2, viewer.clientWidth/2, viewer.clientHeight/2);
+      btnFit.onclick = fitToScreen;
+      btnOne.onclick = () => { scale = Math.max(minScale, 1); panX = 0; panY = 0; applyTransform(); };
+
+      viewer.addEventListener('wheel', e => {
+        e.preventDefault();
+        zoomAt(e.deltaY > 0 ? 1/1.2 : 1.2, e.clientX, e.clientY);
+      }, { passive: false });
+
+      viewer.addEventListener('mousedown', e => {
+        dragging = true;
+        lastX = e.clientX; lastY = e.clientY;
+        viewer.classList.add('grabbing');
+      });
+      window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        panX += e.clientX - lastX;
+        panY += e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        applyTransform();
+      });
+      window.addEventListener('mouseup', () => {
+        dragging = false;
+        viewer.classList.remove('grabbing');
+      });
+
+      viewer.ondblclick = fitToScreen;
+      img.onload = () => { imgW = img.naturalWidth; imgH = img.naturalHeight; fitToScreen(); };
+      window.onresize = fitToScreen;
+    })();
+  </script>
+</body>
+</html>
