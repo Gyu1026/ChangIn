@@ -3,163 +3,116 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>이미지 전체화면 뷰어</title>
+  <title>이미지 보기</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
-    body { font-family: sans-serif; color: #fff; }
-
-    .viewer {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      background: #000;
-      user-select: none;
-      touch-action: none;
-      cursor: grab;
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; }
+    body { background:#000; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial, sans-serif; }
+    /* 상단 바 */
+    .topbar {
+      position: fixed; inset: 0 0 auto 0; height: 56px;
+      display: flex; gap: 8px; align-items: center;
+      padding: 8px 12px; background: rgba(0,0,0,.55);
+      backdrop-filter: blur(6px); z-index: 10;
+      border-bottom: 1px solid rgba(255,255,255,.1);
     }
-    .viewer.grabbing { cursor: grabbing; }
-
-    .stage {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%) scale(1);
-      transform-origin: 0 0;
-      will-change: transform;
+    .topbar input {
+      flex: 1; height: 40px; padding: 0 12px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); color: #fff;
     }
-    .stage img {
+    .topbar button {
+      height: 40px; padding: 0 14px; border-radius: 10px; cursor: pointer;
+      background: rgba(255,255,255,.12); color:#fff; border: 1px solid rgba(255,255,255,.2);
+    }
+    .topbar button:hover { background: rgba(255,255,255,.2); }
+
+    /* 뷰포트 */
+    .viewport {
+      position: fixed; inset: 56px 0 0 0;  /* 상단바 높이만큼 아래부터 */
+      display: grid; place-items: center;  /* 중앙정렬 */
+      background:#000;
+    }
+    /* 핵심: 화면에 맞춰 축소, 비율 유지 */
+    img.viewer {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto; height: auto;
+      object-fit: contain;
       display: block;
-      max-width: none;
-      max-height: none;
     }
 
-    .toolbar {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      display: flex;
-      gap: 8px;
-      z-index: 10;
+    /* 에러/로딩 메시지 */
+    .msg {
+      position: fixed; left: 12px; bottom: 12px;
+      font-size: 12px; color:#ddd; background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2); padding: 8px 10px; border-radius: 10px;
     }
-    .btn {
-      background: rgba(255,255,255,0.12);
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 14px;
-      cursor: pointer;
-      backdrop-filter: blur(6px);
-    }
-    .btn:hover { background: rgba(255,255,255,0.2); }
-
-    .hint {
-      position: absolute;
-      left: 12px; bottom: 12px;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 8px 12px;
-      border-radius: 10px;
-      font-size: 12px;
-      color: #ddd;
-    }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div class="viewer" id="viewer">
-    <div class="toolbar">
-      <button class="btn" id="zoomOut">−</button>
-      <button class="btn" id="zoomIn">＋</button>
-      <button class="btn" id="fit">맞춤</button>
-      <button class="btn" id="one">100%</button>
-    </div>
-
-    <div class="stage" id="stage">
-      <!-- ✅ 고객 이미지 -->
-      <img id="img" alt="이미지" src="https://drive.google.com/uc?export=view&id=1kRDqhz_JLbQ9j6K59x9uZ20HFG0_kBzC" />
-    </div>
-
-    <div class="hint">마우스 휠 확대/축소 · 드래그 이동 · 더블클릭 맞춤</div>
+  <div class="topbar">
+    <input id="urlInput" type="url" placeholder="이미지 URL 붙여넣기 (예: https://i.imgur.com/abc123.png)" />
+    <button id="openBtn">열기</button>
+    <button id="fitBtn" title="화면맞춤">맞춤</button>
   </div>
 
+  <div class="viewport">
+    <!-- ✅ 여기 한 줄이 전부: 이미지를 화면에 딱 맞게 표시 -->
+    <img id="viewer" class="viewer" alt="이미지" />
+  </div>
+
+  <div id="msg" class="msg hidden">로드 중…</div>
+
   <script>
-    (function(){
-      const viewer = document.getElementById('viewer');
-      const stage = document.getElementById('stage');
-      const img = document.getElementById('img');
-      const btnIn = document.getElementById('zoomIn');
-      const btnOut = document.getElementById('zoomOut');
-      const btnFit = document.getElementById('fit');
-      const btnOne = document.getElementById('one');
+    // 기본 이미지(원하는 URL로 바꾸세요) — 구글 드라이브 '직접링크' 예시
+    const DEFAULT_SRC = "https://drive.google.com/uc?export=view&id=1kRDqhz_JLbQ9j6K59x9uZ20HFG0_kBzC";
 
-      let scale = 1;
-      let minScale = 1;
-      let maxScale = 8;
-      let imgW = 0, imgH = 0;
-      let panX = 0, panY = 0;
-      let dragging = false;
-      let lastX = 0, lastY = 0;
+    const $viewer = document.getElementById("viewer");
+    const $urlInput = document.getElementById("urlInput");
+    const $openBtn = document.getElementById("openBtn");
+    const $fitBtn = document.getElementById("fitBtn");
+    const $msg = document.getElementById("msg");
 
-      function applyTransform() {
-        stage.style.transform =
-          `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
-      }
+    // 메시지 헬퍼
+    const showMsg = (text) => { $msg.textContent = text; $msg.classList.remove("hidden"); };
+    const hideMsg = () => { $msg.classList.add("hidden"); };
 
-      function fitToScreen() {
-        const vw = viewer.clientWidth;
-        const vh = viewer.clientHeight;
-        if (!imgW || !imgH) return;
-        const s = Math.min(vw / imgW, vh / imgH);
-        minScale = s;
-        scale = s;
-        panX = 0; panY = 0;
-        applyTransform();
-      }
+    // URL 파라미터 ?src= 로도 이미지 지정 가능
+    const params = new URL(location.href).searchParams;
+    const initialSrc = params.get("src") || DEFAULT_SRC;
 
-      function zoomAt(factor, cx, cy){
-        const prevScale = scale;
-        scale = Math.max(minScale, Math.min(maxScale, scale * factor));
-        const actual = scale / prevScale;
-        const rect = viewer.getBoundingClientRect();
-        const x = cx - rect.left - rect.width/2 - panX;
-        const y = cy - rect.top - rect.height/2 - panY;
-        panX -= x * (actual - 1);
-        panY -= y * (actual - 1);
-        applyTransform();
-      }
+    function loadImage(src){
+      if (!src) return;
+      $urlInput.value = src;
+      showMsg("로드 중…");
 
-      btnIn.onclick = () => zoomAt(1.2, viewer.clientWidth/2, viewer.clientHeight/2);
-      btnOut.onclick = () => zoomAt(1/1.2, viewer.clientWidth/2, viewer.clientHeight/2);
-      btnFit.onclick = fitToScreen;
-      btnOne.onclick = () => { scale = Math.max(minScale, 1); panX = 0; panY = 0; applyTransform(); };
+      // 캐시 이슈 있을 때를 대비해 onload/onerror 갱신
+      const temp = new Image();
+      temp.onload = () => {
+        $viewer.src = src;
+        hideMsg();
+      };
+      temp.onerror = () => {
+        showMsg("이미지를 불러오지 못했습니다. URL과 공개 설정을 확인하세요.");
+      };
+      temp.referrerPolicy = "no-referrer";   // 일부 이미지 호스트 호환성 향상
+      temp.src = src;
+    }
 
-      viewer.addEventListener('wheel', e => {
-        e.preventDefault();
-        zoomAt(e.deltaY > 0 ? 1/1.2 : 1.2, e.clientX, e.clientY);
-      }, { passive: false });
+    // 열기 버튼
+    $openBtn.addEventListener("click", () => loadImage($urlInput.value.trim()));
+    // 엔터로도 열기
+    $urlInput.addEventListener("keydown", e => { if (e.key === "Enter") loadImage($urlInput.value.trim()); });
 
-      viewer.addEventListener('mousedown', e => {
-        dragging = true;
-        lastX = e.clientX; lastY = e.clientY;
-        viewer.classList.add('grabbing');
-      });
-      window.addEventListener('mousemove', e => {
-        if (!dragging) return;
-        panX += e.clientX - lastX;
-        panY += e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
-        applyTransform();
-      });
-      window.addEventListener('mouseup', () => {
-        dragging = false;
-        viewer.classList.remove('grabbing');
-      });
+    // 맞춤(현재 구성에선 자동이라 시각적 리셋용)
+    $fitBtn.addEventListener("click", () => {
+      // object-fit: contain 이라 별도 처리 불필요하지만, 로딩 메시지만 리셋
+      hideMsg();
+    });
 
-      viewer.ondblclick = fitToScreen;
-      img.onload = () => { imgW = img.naturalWidth; imgH = img.naturalHeight; fitToScreen(); };
-      window.onresize = fitToScreen;
-    })();
+    // 처음 로드
+    loadImage(initialSrc);
   </script>
 </body>
 </html>
-
-
