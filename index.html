@@ -6,68 +6,103 @@
   <title>이미지 줌 뷰어</title>
   <style>
     html, body { margin:0; height:100%; background:#000; overflow:hidden; }
-    body { display:flex; justify-content:center; align-items:center; }
+    .canvas {
+      position:fixed; inset:0; background:#000; 
+      display:flex; justify-content:center; align-items:center;
+      user-select:none; touch-action:none;
+    }
     #img {
-      max-width:none;
-      max-height:none;
-      transform-origin:center center;
-      transition: transform 0.05s linear;
+      max-width:none; max-height:none;
+      transform-origin: 0 0; /* 좌상단 기준 (계산 쉬움) */
       cursor: grab;
     }
     #img.dragging { cursor: grabbing; }
+    .hud {
+      position:fixed; left:12px; bottom:12px; color:#ddd; font:12px/1.4 system-ui, sans-serif;
+      background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
+      padding:6px 8px; border-radius:10px;
+    }
   </style>
 </head>
 <body>
-  <!-- 저장소 안 assets 폴더에 올려둔 이미지 -->
-  <img id="img" src="./assets/poster.png" alt="이미지">
+  <div class="canvas" id="canvas">
+    <!-- 저장소 내 이미지 경로로 바꾸세요 -->
+    <img id="img" src="./assets/poster.png" alt="이미지" draggable="false" />
+  </div>
+  <div class="hud">Ctrl + 휠: 확대/축소 · 드래그: 이동 · 더블클릭: 리셋</div>
 
   <script>
+    const canvas = document.getElementById("canvas");
     const img = document.getElementById("img");
-    let scale = 1;         // 현재 배율
-    let posX = 0, posY = 0; // 이동 좌표
-    let dragging = false;
-    let lastX, lastY;
 
-    function applyTransform() {
+    // 옵션: Ctrl 없이 휠만으로도 확대하려면 true로
+    const ALWAYS_ZOOM = false;
+
+    let scale = 1;
+    let minScale = 0.1, maxScale = 10;
+    let posX = 0, posY = 0;
+    let dragging = false, lastX = 0, lastY = 0;
+
+    function apply() {
       img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
     }
 
-    // 컨트롤 + 마우스 휠로 확대/축소
-    window.addEventListener("wheel", (e) => {
-      if (e.ctrlKey) {    // Ctrl 키와 함께 휠 돌렸을 때만 작동
-        e.preventDefault();
-        if (e.deltaY < 0) scale *= 1.1;   // 위로 스크롤 → 확대
-        else scale /= 1.1;                // 아래로 스크롤 → 축소
-        scale = Math.min(Math.max(0.1, scale), 10); // 최소 0.1배, 최대 10배
-        applyTransform();
-      }
+    function zoomAt(factor, clientX, clientY) {
+      const prev = scale;
+      let next = prev * factor;
+      if (next < minScale) next = minScale;
+      if (next > maxScale) next = maxScale;
+      const k = next / prev;
+      if (k === 1) return;
+
+      // 커서 기준으로 확대/축소 보정
+      const rect = img.getBoundingClientRect();
+      const offsetX = clientX - rect.left;
+      const offsetY = clientY - rect.top;
+
+      // transform-origin: 0 0 (좌상단) 기준
+      posX -= offsetX * (k - 1);
+      posY -= offsetY * (k - 1);
+
+      scale = next;
+      apply();
+    }
+
+    // Ctrl + 휠(또는 옵션에 따라 휠만)로 확대/축소
+    canvas.addEventListener("wheel", (e) => {
+      const wantZoom = e.ctrlKey || ALWAYS_ZOOM;
+      if (!wantZoom) return;       // Ctrl 안 누르면 통상 스크롤 유지
+      e.preventDefault();          // 페이지 확대/스크롤 방지 (중요)
+      const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
+      zoomAt(factor, e.clientX, e.clientY);
     }, { passive:false });
 
-    // 드래그로 이미지 이동
+    // 드래그로 이동
     img.addEventListener("mousedown", (e) => {
+      e.preventDefault();
       dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
+      lastX = e.clientX; lastY = e.clientY;
       img.classList.add("dragging");
     });
     window.addEventListener("mousemove", (e) => {
       if (!dragging) return;
       posX += e.clientX - lastX;
       posY += e.clientY - lastY;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      applyTransform();
+      lastX = e.clientX; lastY = e.clientY;
+      apply();
     });
-    window.addEventListener("mouseup", () => {
-      dragging = false;
-      img.classList.remove("dragging");
-    });
+    window.addEventListener("mouseup", () => { dragging = false; img.classList.remove("dragging"); });
 
-    // 더블클릭 시 원래 크기로 초기화
-    img.addEventListener("dblclick", () => {
-      scale = 1;
-      posX = 0; posY = 0;
-      applyTransform();
+    // 더블클릭 리셋
+    img.addEventListener("dblclick", () => { scale = 1; posX = 0; posY = 0; apply(); });
+
+    // 초기 중앙 배치 느낌을 주기 위해 이미지 실제 크기 로드 후 살짝 축소(선택)
+    img.addEventListener("load", () => {
+      // 필요시 초기 배율 조절: 화면에 꽉 차게 시작하려면 아래 주석 해제
+      // const vw = canvas.clientWidth, vh = canvas.clientHeight;
+      // const s = Math.min(vw / img.naturalWidth, vh / img.naturalHeight);
+      // scale = Math.max(minScale, Math.min(maxScale, s));
+      apply();
     });
   </script>
 </body>
