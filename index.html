@@ -3,19 +3,72 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>이미지 가로맞춤 (세로 스크롤)</title>
+  <title>이미지 줌 뷰어</title>
   <style>
-    :root { color-scheme: dark; }
-    html, body { height: 100%; margin: 0; }
-    body { background:#000; }
-    .viewport { position: fixed; inset: 0; overflow: auto; background:#000; }
-    .fitWidth { display:block; width:100%; height:auto; margin:0 auto; }
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    body { display:flex; justify-content:center; align-items:center; }
+    #img {
+      max-width:none;
+      max-height:none;
+      transform-origin:center center;
+      transition: transform 0.05s linear;
+      cursor: grab;
+    }
+    #img.dragging { cursor: grabbing; }
   </style>
 </head>
 <body>
-  <div class="viewport">
-    <!-- 저장소에 올린 이미지(상대경로) -->
-    <img class="fitWidth" src="./assets/poster.png" alt="이미지">
-  </div>
+  <!-- 저장소 안 assets 폴더에 올려둔 이미지 -->
+  <img id="img" src="./assets/poster.png" alt="이미지">
+
+  <script>
+    const img = document.getElementById("img");
+    let scale = 1;         // 현재 배율
+    let posX = 0, posY = 0; // 이동 좌표
+    let dragging = false;
+    let lastX, lastY;
+
+    function applyTransform() {
+      img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+    }
+
+    // 컨트롤 + 마우스 휠로 확대/축소
+    window.addEventListener("wheel", (e) => {
+      if (e.ctrlKey) {    // Ctrl 키와 함께 휠 돌렸을 때만 작동
+        e.preventDefault();
+        if (e.deltaY < 0) scale *= 1.1;   // 위로 스크롤 → 확대
+        else scale /= 1.1;                // 아래로 스크롤 → 축소
+        scale = Math.min(Math.max(0.1, scale), 10); // 최소 0.1배, 최대 10배
+        applyTransform();
+      }
+    }, { passive:false });
+
+    // 드래그로 이미지 이동
+    img.addEventListener("mousedown", (e) => {
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      img.classList.add("dragging");
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      posX += e.clientX - lastX;
+      posY += e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      applyTransform();
+    });
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+      img.classList.remove("dragging");
+    });
+
+    // 더블클릭 시 원래 크기로 초기화
+    img.addEventListener("dblclick", () => {
+      scale = 1;
+      posX = 0; posY = 0;
+      applyTransform();
+    });
+  </script>
 </body>
 </html>
