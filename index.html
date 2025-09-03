@@ -3,194 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>여백 포함 이미지 줌 뷰어</title>
+  <title>여백 포함 이미지 뷰어</title>
   <style>
-    html, body { margin:0; height:100%; background:#0b0b0b; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial, sans-serif; color:#fff; }
-
-    /* 전체 뷰포트: 좌우 여백(padding)으로 거터 제공 */
-    .viewer {
-      position: fixed; inset: 0;
+    html, body {
+      margin: 0;
+      height: 100%;
       background: #000;
-      padding: 0 64px;             /* ←→ 여백(원하면 조절) */
+    }
+    body {
+      display: flex;
+      justify-content: center;  /* 가운데 정렬 */
+      padding: 0 64px;          /* 좌우 여백 */
       box-sizing: border-box;
-      overflow: hidden;
-      user-select: none;
-      touch-action: none;
     }
-
-    /* 스테이지: 중앙 정렬 + transform 으로 이동/스케일 */
-    .stage {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%) scale(1);
-      transform-origin: 0 0;       /* 계산 편의 */
-      will-change: transform;
-    }
-    .stage img {
+    img {
+      width: 100%;      /* 화면 가로에 맞춤 */
+      height: auto;     /* 비율 유지 */
       display: block;
-      max-width: none;              /* transform으로 제어 */
-      max-height: none;
-      cursor: grab;
-    }
-    .stage img.dragging { cursor: grabbing; }
-
-    /* 툴바 */
-    .toolbar {
-      position: absolute;
-      top: 12px; right: 24px;
-      display: flex; gap: 8px;
-      z-index: 10;
-    }
-    .btn {
-      background: rgba(255,255,255,0.12);
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.25);
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 14px;
-      cursor: pointer;
-      backdrop-filter: blur(6px);
-    }
-    .btn:hover { background: rgba(255,255,255,0.2); }
-
-    /* 안내 */
-    .hint {
-      position: absolute;
-      left: 24px; bottom: 16px;
-      font-size: 12px; color: #ddd;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.25);
-      padding: 8px 10px; border-radius: 10px;
     }
   </style>
 </head>
 <body>
-  <div class="viewer" id="viewer">
-    <div class="toolbar">
-      <button class="btn" id="zoomOut">−</button>
-      <button class="btn" id="zoomIn">＋</button>
-      <button class="btn" id="fitW">맞춤가로</button>
-      <button class="btn" id="fitH">맞춤세로</button>
-      <button class="btn" id="reset">초기화</button>
-    </div>
-
-    <div class="stage" id="stage">
-      <!-- 저장소에 올린 파일 경로로 바꿔도 됩니다: ./assets/poster.png -->
-      <img id="img" alt="이미지" src="./assets/poster.png" draggable="false" />
-    </div>
-
-    <div class="hint">휠: 확대/축소 · 드래그: 이동 · 버튼: 맞춤/초기화</div>
-  </div>
-
-  <script>
-    (function(){
-      const viewer = document.getElementById('viewer');
-      const stage  = document.getElementById('stage');
-      const img    = document.getElementById('img');
-
-      const btnIn  = document.getElementById('zoomIn');
-      const btnOut = document.getElementById('zoomOut');
-      const btnFitW= document.getElementById('fitW');
-      const btnFitH= document.getElementById('fitH');
-      const btnReset=document.getElementById('reset');
-
-      let scale = 1, minScale = 0.1, maxScale = 10;
-      let imgW = 0, imgH = 0;
-      let panX = 0, panY = 0;
-      let dragging = false, lastX = 0, lastY = 0;
-
-      // 현재 viewer의 "컨텐츠 폭"(좌우 padding 제외)을 계산
-      function contentWidth() {
-        const styles = getComputedStyle(viewer);
-        const padL = parseFloat(styles.paddingLeft) || 0;
-        const padR = parseFloat(styles.paddingRight) || 0;
-        return viewer.clientWidth - padL - padR;
-      }
-
-      function apply() {
-        stage.style.transform =
-          `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
-      }
-
-      // 가로 맞춤(여백 고려)
-      function fitWidth() {
-        if (!imgW) return;
-        const cw = contentWidth();
-        const s = cw / imgW;        // 여백을 뺀 폭에 맞춤
-        scale = s;
-        panX = 0; panY = 0;
-        apply();
-      }
-
-      // 세로 맞춤
-      function fitHeight() {
-        if (!imgH) return;
-        const ch = viewer.clientHeight;
-        const s = ch / imgH;
-        scale = s;
-        panX = 0; panY = 0;
-        apply();
-      }
-
-      // 커서 기준 줌
-      function zoomAt(factor, clientX, clientY){
-        const prev = scale;
-        let next = prev * factor;
-        if (next < minScale) next = minScale;
-        if (next > maxScale) next = maxScale;
-        const k = next / prev;
-        if (k === 1) return;
-
-        const rect = viewer.getBoundingClientRect();
-        const cx = clientX - rect.left - rect.width/2 - panX;
-        const cy = clientY - rect.top  - rect.height/2 - panY;
-        panX -= cx * (k - 1);
-        panY -= cy * (k - 1);
-
-        scale = next;
-        apply();
-      }
-
-      // 휠 = 확대/축소 (Ctrl 없이도 동작) — 페이지 기본 스크롤/줌 방지
-      viewer.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
-        zoomAt(factor, e.clientX, e.clientY);
-      }, { passive:false });
-
-      // 드래그 이동
-      img.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        dragging = true;
-        lastX = e.clientX; lastY = e.clientY;
-        img.classList.add('dragging');
-      });
-      window.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        panX += e.clientX - lastX;
-        panY += e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
-        apply();
-      });
-      window.addEventListener('mouseup', () => { dragging = false; img.classList.remove('dragging'); });
-
-      // 버튼들
-      btnIn.onclick   = () => zoomAt(1.2, viewer.clientWidth/2, viewer.clientHeight/2);
-      btnOut.onclick  = () => zoomAt(1/1.2, viewer.clientWidth/2, viewer.clientHeight/2);
-      btnFitW.onclick = fitWidth;
-      btnFitH.onclick = fitHeight;
-      btnReset.onclick= () => { panX = 0; panY = 0; fitWidth(); };
-
-      // 이미지 로드 후 초기: 여백 고려한 "가로맞춤"
-      img.addEventListener('load', () => {
-        imgW = img.naturalWidth; imgH = img.naturalHeight;
-        fitWidth();
-      });
-
-      // 리사이즈 시 현재가 "가로맞춤" 느낌 유지
-      window.addEventListener('resize', fitWidth);
-    })();
-  </script>
+  <!-- 저장소에 올려둔 이미지 경로 (예: ./assets/poster.png) -->
+  <img src="./assets/poster.png" alt="이미지">
 </body>
 </html>
