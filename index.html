@@ -3,130 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>이미지 뷰어 (가로맞춤 + 줌/이동)</title>
+  <title>이미지 가로맞춤 (세로 스크롤)</title>
   <style>
-    html, body { height:100%; margin:0; background:#0b0b0b; overflow:hidden; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial, sans-serif; color:#fff; }
-    .viewer { position:relative; width:100vw; height:100vh; background:#000; user-select:none; touch-action:none; }
-    .stage  { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(1); transform-origin:0 0; will-change:transform; }
-    .stage img { display:block; max-width:none; max-height:none; }
-    .toolbar { position:absolute; top:12px; right:12px; display:flex; gap:8px; z-index:10; }
-    .btn { background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.2);
-           padding:8px 10px; border-radius:10px; cursor:pointer; backdrop-filter:blur(6px); }
-    .btn:hover{ background:rgba(255,255,255,.2); }
-    .hint { position:absolute; left:12px; bottom:12px; background:rgba(255,255,255,.12);
-            border:1px solid rgba(255,255,255,.2); padding:8px 12px; border-radius:10px; font-size:12px; color:#ddd; }
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; }
+    body { background:#000; }
+    .viewport { position: fixed; inset: 0; overflow: auto; background:#000; }
+    .fitWidth { display:block; width:100%; height:auto; margin:0 auto; }
   </style>
 </head>
 <body>
-  <div class="viewer" id="viewer">
-    <div class="toolbar">
-      <button class="btn" id="zoomOut">−</button>
-      <button class="btn" id="zoomIn">＋</button>
-      <button class="btn" id="fitW">맞춤가로</button>
-      <button class="btn" id="fitH">맞춤세로</button>
-      <button class="btn" id="one">100%</button>
-    </div>
-
-    <div class="stage" id="stage">
-      <!-- ✅ 구글 드라이브 '직접 이미지' 주소 -->
-      <img id="img" alt="이미지"
-           src="https://drive.google.com/uc?export=view&id=1kRDqhz_JLbQ9j6K59x9uZ20HFG0_kBzC"
-           referrerpolicy="no-referrer" />
-    </div>
-
-    <div class="hint">휠=확대/축소 · 드래그=이동 · 맞춤가로/세로 버튼으로 전환</div>
+  <div class="viewport">
+    <!-- 저장소에 올린 이미지(상대경로) -->
+    <img class="fitWidth" src="./assets/poster.png" alt="이미지">
   </div>
-
-  <script>
-    (function(){
-      const viewer = document.getElementById('viewer');
-      const stage  = document.getElementById('stage');
-      const img    = document.getElementById('img');
-
-      const btnIn  = document.getElementById('zoomIn');
-      const btnOut = document.getElementById('zoomOut');
-      const btnFitW= document.getElementById('fitW');
-      const btnFitH= document.getElementById('fitH');
-      const btnOne = document.getElementById('one');
-
-      let scale = 1, minScale = 1, maxScale = 10;
-      let imgW = 0, imgH = 0;
-      let panX = 0, panY = 0;
-      let dragging = false, lastX = 0, lastY = 0;
-
-      function apply() {
-        stage.style.transform =
-          `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
-      }
-
-      function fitWidth() {
-        const vw = viewer.clientWidth, vh = viewer.clientHeight;
-        if (!imgW || !imgH) return;
-        const s = vw / imgW;      // 가로 기준
-        minScale = s;
-        scale = s;
-        panX = 0; panY = 0;
-        // 세로가 넘치면 사용자 드래그/휠로 보게 함
-        apply();
-      }
-
-      function fitHeight() {
-        const vw = viewer.clientWidth, vh = viewer.clientHeight;
-        if (!imgW || !imgH) return;
-        const s = vh / imgH;      // 세로 기준
-        minScale = s;
-        scale = s;
-        panX = 0; panY = 0;
-        apply();
-      }
-
-      function zoomAt(factor, cx, cy){
-        const prev = scale;
-        scale = Math.max(minScale, Math.min(maxScale, scale * factor));
-        const k = scale / prev;
-
-        const rect = viewer.getBoundingClientRect();
-        const x = cx - rect.left - rect.width/2 - panX;
-        const y = cy - rect.top  - rect.height/2 - panY;
-        panX -= x * (k - 1);
-        panY -= y * (k - 1);
-        apply();
-      }
-
-      // 버튼
-      btnIn.onclick  = () => zoomAt(1.2, viewer.clientWidth/2, viewer.clientHeight/2);
-      btnOut.onclick = () => zoomAt(1/1.2, viewer.clientWidth/2, viewer.clientHeight/2);
-      btnFitW.onclick= fitWidth;
-      btnFitH.onclick= fitHeight;
-      btnOne.onclick = () => { scale = Math.max(minScale, 1); panX = 0; panY = 0; apply(); };
-
-      // 휠 줌
-      viewer.addEventListener('wheel', e => {
-        e.preventDefault();
-        zoomAt(e.deltaY > 0 ? 1/1.2 : 1.2, e.clientX, e.clientY);
-      }, { passive:false });
-
-      // 드래그 이동
-      viewer.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
-      window.addEventListener('mousemove', e => {
-        if (!dragging) return;
-        panX += e.clientX - lastX;
-        panY += e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
-        apply();
-      });
-      window.addEventListener('mouseup', () => dragging = false);
-
-      // 이미지 로드 → 초기값: 가로맞춤(세로로 긴 이미지 읽기 좋음)
-      img.addEventListener('load', () => {
-        imgW = img.naturalWidth; imgH = img.naturalHeight;
-        fitWidth();
-      });
-
-      // 창 크기 변경 시 현재 모드 유지 느낌으로 재계산 (가로맞춤 기준)
-      window.addEventListener('resize', fitWidth);
-    })();
-  </script>
 </body>
 </html>
