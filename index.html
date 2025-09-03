@@ -3,28 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>여백 포함 이미지 뷰어</title>
+  <title>이미지 뷰어</title>
   <style>
     html, body {
       margin: 0;
-      height: 100%;
+      padding: 0;
       background: #000;
     }
     body {
-      display: flex;
-      justify-content: center;  /* 가운데 정렬 */
-      padding: 0 64px;          /* 좌우 여백 */
+      padding: 0 64px;       /* 좌우 여백 (64px → 원하시면 다른 값으로 변경 가능) */
       box-sizing: border-box;
     }
     img {
-      width: 100%;      /* 화면 가로에 맞춤 */
-      height: auto;     /* 비율 유지 */
+      width: 100%;           /* 화면 가로에 맞춤 */
+      height: auto;          /* 세로 비율 유지 */
       display: block;
     }
   </style>
 </head>
 <body>
-  <!-- 저장소에 올려둔 이미지 경로 (예: ./assets/poster.png) -->
+  <!-- 저장소에 올린 이미지 경로 (예: ./assets/poster.png) -->
   <img src="./assets/poster.png" alt="이미지">
 </body>
 </html>
